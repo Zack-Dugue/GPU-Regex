@@ -7,6 +7,14 @@
 #include <sstream>
 #include "nfa.hpp"
 
+struct match_t {
+    string txt; 
+    int idx; 
+    void print()
+    {
+        printf("idx: %d\t match: %s\n",idx,txt.c_str());
+    }; 
+    };
 
 
 bool regex_string_comp(std::string transition, std::string line)
@@ -116,18 +124,21 @@ std::list<string> traverse_node_with_end(vector<state*> state_vec, string line,i
 
 }
 
-std::list<string> match_regex(string regex, string line)
+std::list<match_t> match_regex(string regex, string line)
 {
   printf("\n\n beginning regex match of %s on %s\n", regex.c_str(), line.c_str());
   state* start_state = new state();
   list<state*> state_list = parse_regex(regex, start_state);
   vector<state*> state_vec = convert_state_list(state_list);
   printf("num states %d\n", state_vec.size());
-  list<string> full_match_list; 
+  list<match_t> full_match_list; 
   for(int i = 0; i < line.length(); i++){
     printf("checking string %s\n",line.substr(i,line.length()-i).c_str());
-  list<string> partial_match_list = traverse_node_with_end(state_vec,line.substr(i,line.length()-i), 0, 1);
-  full_match_list.merge(partial_match_list);
+    list<string> partial_match_list = traverse_node_with_end(state_vec,line.substr(i,line.length()-i), 0, 1);
+    for(string match : partial_match_list)
+    {
+        full_match_list.push_back((match_t){match, i});
+    }
   }
   return full_match_list;
 }
@@ -190,28 +201,21 @@ int main()
     printf("Now testing actually looking for matches\n");
     std::string line = std::string("hello world");
     std::string regex = std::string("world");
-    std::list<std::string> matches = match_regex(regex,line);
-    for(std::string match: matches)
+    std::list<match_t> matches = match_regex(regex,line);
+    for(match_t match: matches)
     {
-        printf("%s\n",match.c_str());
+        match.print();
     }
 
+    printf("Now testing actually looking for matches\n");
+    regex = std::string("boss|bi@tch");
+    line = std::string("I'm a boss ass bitch bitch bitch bitch");
+    matches = match_regex(regex,line);
+    for(match_t match: matches)
+    {
+       match.print();
+    }
 
-    printf("\n\n\n BEING VIZUALIZAITON STUFF \n\n\n");
-    start_node->transitions.clear();
-    regex = std::string("yo@mamma@so");
-    nfa = parse_regex(regex, start_node); 
-    generate_nfa_diagram(convert_state_list(nfa),"regex.dot");
-
-    regex = std::string("(ho|yo|shmoyoho)@(hi|(bye)*)");
-    nfa = parse_regex(regex, start_node); 
-    printf("PARSE COMPLETE\n");
-    vector<state*> state_vec_2 = convert_state_list(nfa);
-    printf("CONVERSION COMPLETE\n");
-    pruneNFA(state_vec_2);
-    printf("PRUNE COMPLETE\n");
-    generate_nfa_diagram(state_vec_2,"shmoyoho");
-    printf("GENERATION COMPLETE\n");
 
 
     // printf("Now testing a second time\n");

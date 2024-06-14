@@ -16,7 +16,7 @@ void print_nfa(vector<state*> nfa)
         int i = 0;
     for(state* st : nfa)
     {
-        printf("state %d:\n",i);
+        //printf("state %d:\n",i);
         st->print_self();
         i++;
 
@@ -38,7 +38,7 @@ void checkNFA(const std::vector<state*>& states) {
     for (const state* st : states) {
         for (const transition& t : st->transitions) {
             if (t.next_state_idx < 0 || t.next_state_idx >= states.size()) {
-                printf("state %d has a transition points to %d which is not between 0 and %d",i, t.next_state_idx, states.size());
+                //printf("state %d has a transition points to %d which is not between 0 and %d",i, t.next_state_idx, states.size());
                 print_nfa(states);
                 generate_nfa_diagram(states, "error_diagram\\ERROR");
                 throw std::runtime_error("Transition points to an invalid state index.");
@@ -154,14 +154,14 @@ std::string pre_process_regex(std::string reg)
 
 list<state*> append_state_list(list<state*> l1, list<state*> l2, int end_state_idx)
 {
-    // printf("\t\t beginning state list append\n");
-    // printf("\t\t l2 is length %d\n", l2.size());
+    // //printf("\t\t beginning state list append\n");
+    // //printf("\t\t l2 is length %d\n", l2.size());
 
     int old_size = l1.size();
     for(state* st : l2)
     {
-        // printf("\t\t iterating on for loop\n");
-        // printf("\t\t st->transitions.size() = %d\n", st->transitions.size());
+        // //printf("\t\t iterating on for loop\n");
+        // //printf("\t\t st->transitions.size() = %d\n", st->transitions.size());
         for(transition& t: st->transitions)
         {
             t.next_state_idx = t.next_state_idx + old_size;
@@ -170,9 +170,9 @@ list<state*> append_state_list(list<state*> l1, list<state*> l2, int end_state_i
 
         if(st->transitions.size() == 0)
         {
-            // printf("\t\t adding end state transition\n");
+            // //printf("\t\t adding end state transition\n");
             st->add_transition(end_state_idx,string(""),true);
-            // printf("\t\t done adding end state transition\n");
+            // //printf("\t\t done adding end state transition\n");
 
         }
 
@@ -199,9 +199,9 @@ list<state*> parse_regex(string reg,state* main_node)
 {
     //works left to right, starts deep.
     // First handle the "or" situation
-    printf("Starting parse\n");
+    //printf("Starting parse\n");
     reg = pre_process_regex(reg);
-    printf("Regex after pre-processing %s\n",reg.c_str());
+    //printf("Regex after pre-processing %s\n",reg.c_str());
     list<state*> state_list;
     state_list.push_front(main_node);
 
@@ -213,7 +213,7 @@ list<state*> parse_regex(string reg,state* main_node)
         {
             state* end_node = new state();
             state_list.push_back(end_node);
-            printf("before anything nfa\n ");
+            //printf("before anything nfa\n ");
             print_nfa(convert_state_list(state_list));
             state* left_node = new state();
             if(i == 0)
@@ -223,11 +223,11 @@ list<state*> parse_regex(string reg,state* main_node)
             else
             {
                 list<state*> l_state_list= parse_regex(reg.substr(0, i), left_node);
-                printf("L STATE LIST\n");
+                //printf("L STATE LIST\n");
                 print_nfa(convert_state_list(l_state_list));
                 main_node->add_transition((int)state_list.size(),string(""), true);
                 state_list = append_state_list(state_list, l_state_list,1);
-                     printf("COMBINED STATE LIST\n ");
+                     //printf("COMBINED STATE LIST\n ");
                 print_nfa(convert_state_list(state_list));
             }
             state* right_node = new state();
@@ -238,16 +238,16 @@ list<state*> parse_regex(string reg,state* main_node)
             else
             {
                 list<state*> r_state_list= parse_regex(reg.substr(i+1, reg.length()-i), right_node);
-                                printf("R STATE LIST\n");
+                                //printf("R STATE LIST\n");
                 print_nfa(convert_state_list(r_state_list));
                 main_node->add_transition((int)state_list.size(),string(""), true);
                 state_list = append_state_list(state_list, r_state_list,1);
-                printf("COMBINED STATE LIST\n ");
+                //printf("COMBINED STATE LIST\n ");
                 print_nfa(convert_state_list(state_list));
             }
             checkNFA(convert_state_list(state_list));
             generate_nfa_diagram(convert_state_list(state_list),(string("progressive_diagram\\") + fix_this(reg)).c_str());
-            printf("returning NFA for reg %s\n", reg.c_str());
+            //printf("returning NFA for reg %s\n", reg.c_str());
             return state_list;
         }
      }
@@ -272,7 +272,7 @@ list<state*> parse_regex(string reg,state* main_node)
             state_list = append_state_list(state_list, r_state_list,1);
             checkNFA(convert_state_list(state_list));
             generate_nfa_diagram(convert_state_list(state_list),(string("progressive_diagram\\") + fix_this(reg)).c_str());
-            printf("returning NFA for reg %s\n",reg.c_str());
+            //printf("returning NFA for reg %s\n",reg.c_str());
             
             return state_list;            
         }
@@ -288,20 +288,20 @@ list<state*> parse_regex(string reg,state* main_node)
         list<state*> l_state_list = parse_regex(reg.substr(0, reg.length()-1), left_node);
         main_node->add_transition(1,string(""), true);
         main_node->add_transition(2,string(""), true);
-        printf("before star append size of  list %d\n", state_list.size());
+        //printf("before star append size of  list %d\n", state_list.size());
 
         state_list = append_state_list(state_list, l_state_list,0);
-        printf("after star append size of new list %d\n", state_list.size());
+        //printf("after star append size of new list %d\n", state_list.size());
         checkNFA(convert_state_list(state_list));
-        printf("returning NFA for reg %s\n", reg.c_str());
+        //printf("returning NFA for reg %s\n", reg.c_str());
         return state_list;
     }
     case '+':
     {
         std::string new_string;
         new_string.append(reg.substr(0,reg.length()-1)).append("@").append(reg.substr(0,reg.length()-1)).append("*");
-        // printf("\t plus new string %s\n", new_string.c_str());
-        printf("returning NFA for reg %s\n", reg.c_str());
+        // //printf("\t plus new string %s\n", new_string.c_str());
+        //printf("returning NFA for reg %s\n", reg.c_str());
         return parse_regex(new_string,main_node);
     }
     case '?':
@@ -376,7 +376,7 @@ void pruneNFA(std::vector<state*>& nfa) {
     }
 
     // Adjust transitions before deleting states
-    printf("fixing transitions before deleting states\n");
+    //printf("fixing transitions before deleting states\n");
     for (auto& state : nfa) {
         if (!state) continue;
         std::vector<transition> newTransitions;
@@ -394,7 +394,7 @@ void pruneNFA(std::vector<state*>& nfa) {
     }
 
     // Adjust indices in transitions
-    printf("adjusting indices\n");
+    //printf("adjusting indices\n");
     std::vector<int> indexMap(nfa.size());
     int newIndex = 0;
     for (size_t i = 0; i < pruned.size(); ++i) {
@@ -402,7 +402,7 @@ void pruneNFA(std::vector<state*>& nfa) {
             indexMap[i] = newIndex++;
         }
     }
-    printf("adjusting more indices\n");
+    //printf("adjusting more indices\n");
     for (auto& state : nfa) {
         for (auto& trans : state->transitions) {
             if (!pruned[trans.next_state_idx]) {
