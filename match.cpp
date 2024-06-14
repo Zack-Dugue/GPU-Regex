@@ -1,4 +1,4 @@
-    #include <string>
+#include <string>
 #include <vector>
 #include <list>
 #include <iostream>
@@ -146,75 +146,75 @@ std::list<match_t> match_regex(string regex, string line)
 
 int main()
 {
-    std::cout << "Hello, World!" << std::flush;
-
-    printf("BEGIN");
-        printf("starting program\n");
+    printf("starting program\n");
     printf("Does it run without failing on hello\n");
     state* start_node = new state();
     list<state*> nfa = parse_regex("hello", start_node); 
 
-    printf("Does it run without failing on hello@world\n");
+    printf("Pre Processessing test:");
     start_node->transitions.clear();
-    nfa = parse_regex("hello@world", start_node); 
+    parse_regex("look bob i'm tired of being told i'm crazy when I know I'm not crazy. I did not do those things they said i did and I can prove it. The files, I know about the files bob. Just tell me about the files bob. OOGA BOOGA. dAVA.",start_node);
+    // printf("Does it run without failing on hello@world\n");
+    // start_node->transitions.clear();
+    // nfa = parse_regex("hello@world", start_node); 
 
-    start_node->transitions.clear();
+    // start_node->transitions.clear();
 
-    printf("Does it run without failing on hello|world\n");
+    // printf("Does it run without failing on hello|world\n");
     
-    nfa = parse_regex("hello|world", start_node); 
+    // nfa = parse_regex("hello|world", start_node); 
 
-    start_node->transitions.clear();
+    // start_node->transitions.clear();
 
-    printf("Does it run without failing on hello|world|buddy\n");
-    nfa = parse_regex("hello|world|buddy", start_node); 
-    generate_nfa_diagram(convert_state_list(nfa), "hello_world_buddy_or");
-    printf("Does it run without failing on hello*\n");
-    start_node->transitions.clear();
-    nfa = parse_regex("(hello)*", start_node); 
+    // printf("Does it run without failing on hello|world|buddy\n");
+    // nfa = parse_regex("hello|world|buddy", start_node); 
+    // generate_nfa_diagram(convert_state_list(nfa), "hello_world_buddy_or");
+    // printf("Does it run without failing on hello*\n");
+    // start_node->transitions.clear();
+    // nfa = parse_regex("(hello)*", start_node); 
     
 
 
-    printf("Now we try to traverse the regex 'hello'\n");
-    start_node->transitions.clear();
-    nfa = parse_regex("hello", start_node); 
-    vector<state*>state_vec = convert_state_list(nfa);
-    printf("state_vec size %d\n", state_vec.size());
-    traverse_node_with_end(state_vec, "hello world",0,1);
+    // printf("Now we try to traverse the regex 'hello'\n");
+    // start_node->transitions.clear();
+    // nfa = parse_regex("hello", start_node); 
+    // vector<state*>state_vec = convert_state_list(nfa);
+    // printf("state_vec size %d\n", state_vec.size());
+    // traverse_node_with_end(state_vec, "hello world",0,1);
 
 
-    printf("Now we try to traverse the regex 'hello*'\n");
-    start_node->transitions.clear();
-    nfa = parse_regex("(hello)*", start_node); 
-    traverse_node_with_end(convert_state_list(nfa), "hello world",0,1);
+    // printf("Now we try to traverse the regex 'hello*'\n");
+    // start_node->transitions.clear();
+    // nfa = parse_regex("(hello)*", start_node); 
+    // traverse_node_with_end(convert_state_list(nfa), "hello world",0,1);
 
-    printf("Now we try to traverse the regex 'hello@world'\n");
-    start_node->transitions.clear();
-    nfa = parse_regex("hello@world", start_node); 
-    traverse_node_with_end(convert_state_list(nfa), "hello world",0,1);
+    // printf("Now we try to traverse the regex 'hello@world'\n");
+    // start_node->transitions.clear();
+    // nfa = parse_regex("hello@world", start_node); 
+    // traverse_node_with_end(convert_state_list(nfa), "hello world",0,1);
 
-     printf("Now we try to traverse the regex 'hello|world'\n");
-     start_node->transitions.clear();
-    nfa = parse_regex("hello|world", start_node); 
-    traverse_node_with_end(convert_state_list(nfa), "hello world",0,1);
+    //  printf("Now we try to traverse the regex 'hello|world'\n");
+    //  start_node->transitions.clear();
+    // nfa = parse_regex("hello|world", start_node); 
+    // traverse_node_with_end(convert_state_list(nfa), "hello world",0,1);
 
-    printf("Now testing actually looking for matches\n");
-    std::string line = std::string("hello world");
-    std::string regex = std::string("world");
-    std::list<match_t> matches = match_regex(regex,line);
-    for(match_t match: matches)
-    {
-        match.print();
-    }
+    // printf("Now testing actually looking for matches\n");
+    // std::string line = std::string("hello world");
+    // std::string regex = std::string("world");
+    // std::list<match_t> matches = match_regex(regex,line);
+    // for(match_t match: matches)
+    // {
+    //     match.print();
+    // }
 
-    printf("Now testing actually looking for matches\n");
-    regex = std::string("boss|bi@tch");
-    line = std::string("I'm a boss ass bitch bitch bitch bitch");
-    matches = match_regex(regex,line);
-    for(match_t match: matches)
-    {
-       match.print();
-    }
+    // printf("Now testing actually looking for matches\n");
+    // regex = std::string("boss|bi@tch");
+    // line = std::string("I'm a boss ass bitch bitch bitch bitch");
+    // matches = match_regex(regex,line);
+    // for(match_t match: matches)
+    // {
+    //    match.print();
+    // }
 
 
 

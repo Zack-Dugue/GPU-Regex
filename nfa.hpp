@@ -8,9 +8,10 @@
 #include <sstream>
 #include <cstdio>
 #include <ctime>
-
-
 using namespace std;
+
+
+
 struct transition
 {
     int next_state_idx;
@@ -48,3 +49,4 @@ vector<state*> convert_state_list(list<state*> st_list);
 void generate_nfa_diagram(const std::vector<state*>& states,std::string base_filename);
 
 void pruneNFA(std::vector<state*>& nfa);
+
