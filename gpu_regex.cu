@@ -54,16 +54,37 @@ nfa_t convert_state_vec_d(vector<state*> st_vec)
     for(int i =0; i<st_vec.size();i++ )
     {
         state* st = st_vec[i];
-        d_state_vec.push_back((d_state){offset,st->transitions.size()});
+        d_state_vec.push_back((d_state) {offset,st->transitions.size()});
         for(transition tr : st->transitions)
         {
-            d_tr_vec.push_back((d_transition) {tr.next_state_idx, *tr.txt.c_str(), tr.txt.length()});
+            d_transition new_tr;
+            new_tr.next_state_idx = tr.next_state_idx;
+            memset(new_tr.txt, 0, MAX_CHUNK_LENGTH);
+            strncpy(new_tr.txt,tr.txt.c_str(),tr.txt.length());
+            new_tr.len = tr.txt.length();
+            d_tr_vec.push_back(new_tr);
         }
         offset += st->transitions.size();
     }
     return (nfa_t) {d_state_vec, d_tr_vec, st_vec.size(), offset};
 } 
 
+
+// Function to print a human-readable description of the NFA
+void describeNFA(const nfa_t& nfa) {
+    std::cout << "NFA Description:" << std::endl;
+    printf("Num States = %d , Num Transitions = %d\n", nfa.n_states, nfa.n_transitions);
+
+    for (int i = 0; i < nfa.states.size(); i++) {
+        const d_state& state = nfa.states[i];
+        std::cout << "State " << i << " with " << state.num_tr << " transitions:" << std::endl;
+        for (int j = state.start_tr; j < state.start_tr + state.num_tr; j++) {
+            const d_transition& tr = nfa.transitions[j];
+            std::cout << "  Transition to state " << tr.next_state_idx 
+                      << " on symbol '" << std::string(tr.txt, tr.len) << "'" << std::endl;
+        }
+    }
+}
 
 
 
@@ -83,7 +104,7 @@ __device__ bool regex_string_comp(char* transition, const char* line, int len)
 
 
  //todo replace all integers in here with unsigned integers.
-__global__ void RMatchKernel(d_state* nfa_st,d_transition* nfa_tr, const char* text, const int n, const int L, int* out_vec){
+__global__ void RMatchKernel(d_state* nfa_st,d_transition* nfa_tr, const char* text, const int n, const int L, int* out_vec, int* out_counter){
     int blocksInGrid = gridDim.x;  // Total number of blocks in the grid along the x-axis
     int threadsInBlock = blockDim.x;  // Number of threads per block along the x-axis
 
@@ -91,47 +112,75 @@ __global__ void RMatchKernel(d_state* nfa_st,d_transition* nfa_tr, const char* t
     int blockIndex = blockIdx.x;  // Index of the current block within the grid
     int threadIndex = threadIdx.x;
     int warp_idx = threadIndex/32;
+    printf("printing from the kernel\n");
 
 
     // TODO handle chunking up the data so we don't have such a huge blob in shared memory.
     // There are state number of rows and L number of columns in our big state vector.
     // Consider transposing this!
-    int **state_vec;
-    cudaMalloc((void***) &state_vec, sizeof(int)*n*L);
-    //We need an object to actually be able to write out to.
-    int out_counter;
-    //Now we set everything to 0 except for the initial states. 
-    for(int j = blockIndex*threadsInBlock + threadIndex ; j < n*L; j = j + blocksInGrid * threadsInBlock)
-    {
-        state_vec[j/n][j%n] = 0 + (j % n == 0);
-    }
+    // the state_vec can be assumed to take the shape of
+    // n*(L/blocks
+    extern __shared__ int state_vec[];
 
+    //We need an object to actually be able to write out to.
+
+
+    //Now we set everything to 0 except for the initial states. 
+    for(int j = threadIndex ; j < n*(L/blocksInGrid + 1); j = j + threadsInBlock)
+    {
+        state_vec[j] = 0 + (j % n == 0);
+    }
 
 
     __syncthreads();
     bool any_active_state = true;
+    printf("starting while loop\n");
+
+    int r = 0;
     while(any_active_state){
+    any_active_state = false;
+    printf("While loop iteration %d\n",r);
+    r++;
     __syncthreads();
     unsigned int bitmask =0;
-    for(int j = blockIndex*threadsInBlock + threadIndex ; j < n*L; j = j + blocksInGrid * threadsInBlock)
+    for(int i = 0; blockIndex*threadsInBlock + threadIndex + blocksInGrid * threadsInBlock*i < n*L; i++)
     {
-        if(state_vec[j/n][j%n] != 0 )
+        int state_vec_idx = threadIndex + i * threadsInBlock;
+
+
+        if(state_vec[state_vec_idx] != 0 )
         {
         __syncwarp(bitmask);
-        int old_val = state_vec[j/n][j%n];
-        state_vec[j/n][j%n] = 0;
-        
-        for(int i = nfa_st[j%n].start_tr; i < nfa_st[j%n].start_tr + nfa_st[j%n].num_tr; i++ )
+        int j = blockIndex*threadsInBlock + threadIndex + blocksInGrid * threadsInBlock*i;
+        int t = j / n;
+        int s = j % n ;
+        printf("\t for loop iteration %d: \t state_vec_idx=%d \t global_idx=%d \t character_idx=%d \t state_idx=%d\n",i,state_vec_idx,j,t,s);
+        printf("\t current read_string is %s\n",&text[t]);
+        printf("\t this state is active\n");
+        int old_val = state_vec[state_vec_idx];
+        state_vec[state_vec_idx] = 0;
+        printf("\t about to iterate through transitions\n");
+        for(int k = nfa_st[s].start_tr; k < nfa_st[s].start_tr + nfa_st[s].num_tr; k++ )
         {
-            d_transition tr = nfa_tr[i];
+            d_transition tr = nfa_tr[k];
+            printf("\t\t transition %d to state %d transition string %s\n",k,tr.next_state_idx,tr.txt);
+            if(regex_string_comp(tr.txt,&text[t],tr.len))
+            {
+                printf("\t\t the transition matches\n");
+                printf("\t\t setting %d  in state_vec to %d\n",t*n + tr.next_state_idx,state_vec[t*n + tr.next_state_idx]*(1-regex_string_comp(tr.txt,&text[t+old_val-1],tr.len)) + (old_val + tr.len)*regex_string_comp(tr.txt,&text[t+old_val-1],tr.len));
+            }
             //Consider race condition here. Maybe want to account for that? 
-            state_vec[j/n][tr.next_state_idx] = old_val + tr.len*regex_string_comp(tr.txt,text,L-(i/n));
+            state_vec[t*n + tr.next_state_idx] = state_vec[t*n + tr.next_state_idx]*(1-regex_string_comp(tr.txt,&text[t+old_val-1],tr.len)) + (old_val + tr.len)*regex_string_comp(tr.txt,&text[t+old_val-1],tr.len);
         }
-        if(j%n == 1)
+        if(s == 1)
         {
-            int current_counter = atomicAdd(&out_counter, 1);
-            // out_vec[current_counter] = j/n;
-            // out_vec[current_counter+1] = old_val;
+            printf("\t this is an end state\n");
+            int current_counter = atomicAdd(out_counter, 1);
+            printf("\t\t end state atomic add complete\n");
+            out_vec[2*current_counter] = t;
+            out_vec[2*current_counter+1] = old_val-1;
+            printf("\t\t %d end state data wrote %d, %d\n",current_counter, t, old_val);
+
         }
         any_active_state = true;
         }
@@ -139,6 +188,7 @@ __global__ void RMatchKernel(d_state* nfa_st,d_transition* nfa_tr, const char* t
     
     bitmask |= (1 << warp_idx);
     }
+printf("KERNEL COMPLETE\n");
 }
 
 
@@ -151,13 +201,18 @@ void GPU_Match_It(string regex, string text,int gridSize, int blockSize)
     list<state*> state_list = parse_regex(regex,start_state);
     printf("Converting NFA into GPU friendly format.\n");
     vector<state*> nfa_vec = convert_state_list(state_list);
+    print_nfa(nfa_vec);
     nfa_t nfa_struct = convert_state_vec_d(nfa_vec);
+    describeNFA(nfa_struct);
 
     printf("Initializing out_vec in cuda memory\n");
     int* out_vec;
     CUDA_CALL(cudaMalloc((void**) &out_vec, 2*MAX_NUMBER_OF_MATCHES*sizeof(int)));
     CUDA_CALL(cudaMemset((void*) out_vec,-1,  2*MAX_NUMBER_OF_MATCHES*sizeof(int)));
-
+    printf("\tInitializing out counter as well\n");
+    int* out_counter = 0;
+    cudaMalloc((void**)&out_counter,sizeof(int));
+    cudaMemset((void*) out_counter,0,sizeof(int) );
 
     const int n = nfa_struct.n_states;
     // state** nfa;
@@ -173,31 +228,37 @@ void GPU_Match_It(string regex, string text,int gridSize, int blockSize)
 
     d_transition* nfa_tr;
     CUDA_CALL(cudaMalloc((void**) &nfa_tr, sizeof(d_transition)*nfa_struct.n_transitions));
-    CUDA_CALL(cudaMemcpy(nfa_tr, (&nfa_struct.transitions[0]), sizeof(d_transition)*nfa_struct.n_transitions, cudaMemcpyHostToDevice));
+    CUDA_CALL(cudaMemcpy(nfa_tr, &(nfa_struct.transitions[0]), sizeof(d_transition)*nfa_struct.n_transitions, cudaMemcpyHostToDevice));
     
     printf("Initializing d_text in cuda memory\n");
     char* d_text;
-    CUDA_CALL(cudaMalloc((void**) &d_text, sizeof(d_transition)*nfa_struct.n_transitions));
+    CUDA_CALL(cudaMalloc((void**) &d_text, sizeof(char)*text.length()) );
     CUDA_CALL(cudaMemcpy(d_text, text.c_str(), text.length(), cudaMemcpyHostToDevice));
 
+
     printf("Calling the kernel\n");
-    RMatchKernel<<<gridSize, blockSize>>>(nfa_st, nfa_tr, d_text,nfa_struct.n_states,text.length(), out_vec);
-    cudaError_t err = cudaGetLastError();
-    if (err != cudaSuccess) 
-        printf("Error: %s\n", cudaGetErrorString(err));
-    printf("kernel complete\n");
+    size_t extern_size = n*(text.length()/gridSize + 1) * sizeof(int) ;
+    cudaDeviceSynchronize();
+    RMatchKernel<<<gridSize, blockSize,extern_size>>>(nfa_st, nfa_tr, d_text,nfa_struct.n_states,text.length(), out_vec,out_counter);
+    cudaDeviceSynchronize();
+    cudaError_t execErr = cudaGetLastError();
+    if (execErr != cudaSuccess) {
+            printf("Execution Error: %s\n", cudaGetErrorString(execErr));
+    }
 
     printf("Copying memory off the device back onto the host.\n");
     int *h_out_vec = new int[2*MAX_NUMBER_OF_MATCHES];
     printf("h_out_vec pointer %p, out_vec points %p\n ", h_out_vec, out_vec);
-    CUDA_CALL(cudaMemcpy((void*) h_out_vec, (void*) out_vec, 2*MAX_NUMBER_OF_MATCHES*sizeof(int), cudaMemcpyDeviceToHost));
+    cudaMemcpy((void*) h_out_vec, (void*) out_vec, 2*MAX_NUMBER_OF_MATCHES*sizeof(int), cudaMemcpyDeviceToHost);
+    int *h_out_counter = new int;
+    cudaMemcpy((void*) h_out_counter, (void*) out_counter,sizeof(int), cudaMemcpyDeviceToHost);
 
-    printf("print matches\n");
+    printf("print %d matches\n",*h_out_counter);
     for(int i =0; i < MAX_NUMBER_OF_MATCHES; i++)
     {
-        if(h_out_vec[2*i] >0)
+        if(h_out_vec[2*i+1] > 0)
         {
-            printf("match found at idx %d: %s",h_out_vec[2*i], text.substr(h_out_vec[2*i], h_out_vec[2*i+1]));
+            printf("match found at idx %d of length %d: %s\n",h_out_vec[2*i], h_out_vec[2*i+1],text.substr(h_out_vec[2*i], h_out_vec[2*i+1]).c_str());
         }
     }
 }

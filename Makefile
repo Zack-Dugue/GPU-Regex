@@ -19,7 +19,7 @@ CUDA_LIB_PATH = $(CUDA_PATH)/lib64
 
 NVCC = $(CUDA_BIN_PATH)/nvcc
 NVCC_COMPILE_FLAGS = -g -dc -Wno-deprecated-gpu-targets --std=c++11 \
-             --expt-relaxed-constexpr -I$(CUDA_INC_PATH) -gencode arch=compute_52,code=sm_52
+             --expt-relaxed-constexpr -I$(CUDA_INC_PATH) -gencode arch=compute_52,code=sm_52 -lineinfo
 NVCC_LINK_FLAGS = -g -Wno-deprecated-gpu-targets --std=c++11 -I$(CUDA_INC_PATH)
 NVCC_LIBS = -L$(CUDA_LIB_PATH) -lcudart
 

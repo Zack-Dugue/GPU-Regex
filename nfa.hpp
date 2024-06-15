@@ -41,6 +41,8 @@ struct state
     }
 
 };
+void print_nfa(vector<state*> nfa);
+
 
 list<state*> parse_regex(string reg,state* main_node);
 
@@ -49,4 +51,5 @@ vector<state*> convert_state_list(list<state*> st_list);
 void generate_nfa_diagram(const std::vector<state*>& states,std::string base_filename);
 
 void pruneNFA(std::vector<state*>& nfa);
+
 
