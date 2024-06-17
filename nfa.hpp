@@ -24,8 +24,14 @@ struct state
 {
     vector<transition> transitions;
     state() : transitions() {};
-    void add_transition(int next_state_idx, string txt, bool consume)
-    {
+
+    void add_transition(int next_state_idx, string txt, bool consume) {
+        // Check for existing transition with same target and text
+        for (auto& tr : transitions) {
+            if (tr.next_state_idx == next_state_idx && tr.txt == txt) {
+                return; // Transition already exists, do not add duplicate
+            }
+        }
         transition tr = {next_state_idx, txt, consume};
         transitions.push_back(tr);
     }
@@ -50,6 +56,5 @@ vector<state*> convert_state_list(list<state*> st_list);
 
 void generate_nfa_diagram(const std::vector<state*>& states,std::string base_filename);
 
-void pruneNFA(std::vector<state*>& nfa);
-
+void checkNFA(const std::vector<state*>& states);
 

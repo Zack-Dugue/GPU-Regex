@@ -7,6 +7,7 @@
 #include <sstream>
 #include "nfa.hpp"
 #include <cassert>
+#include <assert.h>
 #include <cuda_runtime.h>
 #include <math.h>
 #include "gpu_regex.cuh"
@@ -103,16 +104,16 @@ __device__ bool regex_string_comp(char* transition, const char* line, int len)
 
 
 
+
  //todo replace all integers in here with unsigned integers.
-__global__ void RMatchKernel(d_state* nfa_st,d_transition* nfa_tr, const char* text, const int n, const int L, int* out_vec, int* out_counter){
-    int blocksInGrid = gridDim.x;  // Total number of blocks in the grid along the x-axis
+__global__ void RMatchKernel(d_state* nfa_st,d_transition* nfa_tr, const char* text, const int n, const int L_prime, int* out_vec, int* out_counter){
+    int blocksInGrid = gridDim.x ;  // Total number of blocks in the grid along the x-axis
     int threadsInBlock = blockDim.x;  // Number of threads per block along the x-axis
 
     // You can also access the block index and thread index
     int blockIndex = blockIdx.x;  // Index of the current block within the grid
     int threadIndex = threadIdx.x;
-    int warp_idx = threadIndex/32;
-    printf("printing from the kernel\n");
+    int warp_idx = threadIndex % 32;
 
 
     // TODO handle chunking up the data so we don't have such a huge blob in shared memory.
@@ -122,88 +123,121 @@ __global__ void RMatchKernel(d_state* nfa_st,d_transition* nfa_tr, const char* t
     // n*(L/blocks
     extern __shared__ int state_vec[];
 
-    //We need an object to actually be able to write out to.
+    // We need to make it impossible for two blocks to have threads
+    // working on the same suffix.
+    // We're just going to pretend that L is smaller then it actually is,
+    // And then shift t when accessing strings, based on the block index and the.
+    // number of blocks. 
+    // int baseL = L_prime / blocksInGrid;
+    // int remainder = L_prime % blocksInGrid;
+    // int L = baseL + (blockIndex < remainder ? 1 : 0);
 
-
-    //Now we set everything to 0 except for the initial states. 
-    for(int j = threadIndex ; j < n*(L/blocksInGrid + 1); j = j + threadsInBlock)
+    int L ;
+    if(blockIndex == blocksInGrid-1)
     {
-        state_vec[j] = 0 + (j % n == 0);
+        L = L_prime % (blocksInGrid-1);
+    }
+    else
+    {
+        L = L_prime / (blocksInGrid-1);
     }
 
+    bool* any_active_state = (bool*) &state_vec[n*L];
 
+
+
+
+    for(int j = threadIndex ; j < n*L ; j = j + threadsInBlock)
+    {
+        state_vec[j] = 0 + (j / L == 0);
+    }
+
+    
     __syncthreads();
-    bool any_active_state = true;
-    printf("starting while loop\n");
+    *any_active_state = true;
+    if(blockIndex == 0)printf("starting while loop\n");
 
     int r = 0;
-    while(any_active_state){
-    any_active_state = false;
-    printf("While loop iteration %d\n",r);
-    r++;
-    __syncthreads();
-    unsigned int bitmask =0;
-    for(int i = 0; blockIndex*threadsInBlock + threadIndex + blocksInGrid * threadsInBlock*i < n*L; i++)
-    {
-        int state_vec_idx = threadIndex + i * threadsInBlock;
-
-
-        if(state_vec[state_vec_idx] != 0 )
+    while(*any_active_state){
+        __syncthreads();
+        *any_active_state = false;
+        if(blockIndex == 0)printf("While loop iteration %d\n",r); 
+        r++;
+        unsigned int bitmask =0xffffffff;
+        for(int i = 0; threadIndex + threadsInBlock*i < n*L; i++)
         {
-        __syncwarp(bitmask);
-        int j = blockIndex*threadsInBlock + threadIndex + blocksInGrid * threadsInBlock*i;
-        int t = j / n;
-        int s = j % n ;
-        printf("\t for loop iteration %d: \t state_vec_idx=%d \t global_idx=%d \t character_idx=%d \t state_idx=%d\n",i,state_vec_idx,j,t,s);
-        printf("\t current read_string is %s\n",&text[t]);
-        printf("\t this state is active\n");
-        int old_val = state_vec[state_vec_idx];
-        state_vec[state_vec_idx] = 0;
-        printf("\t about to iterate through transitions\n");
-        for(int k = nfa_st[s].start_tr; k < nfa_st[s].start_tr + nfa_st[s].num_tr; k++ )
-        {
-            d_transition tr = nfa_tr[k];
-            printf("\t\t transition %d to state %d transition string %s\n",k,tr.next_state_idx,tr.txt);
-            if(regex_string_comp(tr.txt,&text[t],tr.len))
-            {
-                printf("\t\t the transition matches\n");
-                printf("\t\t setting %d  in state_vec to %d\n",t*n + tr.next_state_idx,state_vec[t*n + tr.next_state_idx]*(1-regex_string_comp(tr.txt,&text[t+old_val-1],tr.len)) + (old_val + tr.len)*regex_string_comp(tr.txt,&text[t+old_val-1],tr.len));
+            int state_vec_idx = threadIndex + i * threadsInBlock;
+            // int j = (blockIndex*threadsInBlock + threadIndex) + (blocksInGrid * threadsInBlock)*i;
+            int old_val = state_vec[state_vec_idx];
+            int t = L*blockIndex + state_vec_idx % L;
+            int s = state_vec_idx / L ;
+            if (blockIndex == 0 && threadIdx.x == 0) {
+                printf("Calculated t: %d, Base L: %d, BlockIndex: %d, ThreadIdx: %d, StateVecIdx: %d\n", t, L, blockIndex, threadIdx.x, state_vec_idx);
             }
-            //Consider race condition here. Maybe want to account for that? 
-            state_vec[t*n + tr.next_state_idx] = state_vec[t*n + tr.next_state_idx]*(1-regex_string_comp(tr.txt,&text[t+old_val-1],tr.len)) + (old_val + tr.len)*regex_string_comp(tr.txt,&text[t+old_val-1],tr.len);
-        }
-        if(s == 1)
-        {
-            printf("\t this is an end state\n");
-            int current_counter = atomicAdd(out_counter, 1);
-            printf("\t\t end state atomic add complete\n");
-            out_vec[2*current_counter] = t;
-            out_vec[2*current_counter+1] = old_val-1;
-            printf("\t\t %d end state data wrote %d, %d\n",current_counter, t, old_val);
+            if(state_vec[state_vec_idx] != 0 )
+            {
 
+
+
+            state_vec[state_vec_idx] = 0;
+            __syncwarp(bitmask);
+            for(int k = nfa_st[s].start_tr; k < nfa_st[s].start_tr + nfa_st[s].num_tr; k++ )
+            {
+                d_transition tr = nfa_tr[k];
+
+                //Consider race condition here. Maybe want to account for that? 
+                
+                if(regex_string_comp(tr.txt,&text[t+old_val-1],tr.len) && (state_vec[L*tr.next_state_idx + (t- L*blockIndex)] < (old_val + tr.len) ))
+                {   
+
+                    
+                    // if(blockIndex == 0)printf("\t for loop iteration %d: \t state_vec_idx=%d \t character_idx=%d \t state_idx=%d\n",i,state_vec_idx,t,s);
+                    // if(blockIndex == 0)printf("\t gpu_info: \t thread_idx=%d \t block_idx=%d \n",threadIndex,blockIndex);
+                    // // if(blockIndex == 0)printf("\t current read_string is %s\n",&text[t]);
+                    // if(blockIndex == 0)printf("\t\t transition %d to state %d transition string %s\n",k,tr.next_state_idx,tr.txt);
+
+                    //  if(blockIndex == 0)printf("\t\t the transition matches:\n");
+                    // if(blockIndex == 0)printf("\t\t writing %d to state_vec idx %d \n",(old_val + tr.len),L*tr.next_state_idx + (t- L*blockIndex));
+                    if(state_vec[L*tr.next_state_idx + (t- L*blockIndex)] != 0)
+                    {
+                        assert(false);
+                        printf("HOLY CRAP IT HAPPENED\n");
+                    }
+                    state_vec[L*tr.next_state_idx + (t- L*blockIndex)] = (old_val + tr.len);}
+            }
+            if(s == 1 && old_val > 1)
+            {
+                if(blockIndex == 0)printf("\t this is an end state\n");
+                int current_counter = atomicAdd(out_counter, 1);
+                if(blockIndex == 0)printf("\t\t end state atomic add complete\n");
+                out_vec[2*current_counter] = t;
+                out_vec[2*current_counter+1] = old_val-1;
+                if(blockIndex == 0)printf("\t\t %d end state data wrote %d, %d\n",current_counter, t, old_val);
+
+            }
+            *any_active_state = true;
+            }
+            }
+        
+        bitmask |= ~(1 << warp_idx);
         }
-        any_active_state = true;
-        }
-        }
-    
-    bitmask |= (1 << warp_idx);
-    }
-printf("KERNEL COMPLETE\n");
+if(blockIndex == 0)printf("KERNEL COMPLETE\n");
 }
 
 
 __host__
 void GPU_Match_It(string regex, string text,int gridSize, int blockSize)
 {
-    printf("Beginning GPU matching of regex %s with string %s\n", regex.c_str(), text.c_str());
+    // printf("Beginning GPU matching of regex %s with string %s\n", regex.c_str(), text.c_str());
     state* start_state = new state();
     printf("Parsing Regex\n");
     list<state*> state_list = parse_regex(regex,start_state);
     printf("Converting NFA into GPU friendly format.\n");
     vector<state*> nfa_vec = convert_state_list(state_list);
-    print_nfa(nfa_vec);
+    // print_nfa(nfa_vec);
+    // checkNFA(nfa_vec);
     nfa_t nfa_struct = convert_state_vec_d(nfa_vec);
-    describeNFA(nfa_struct);
+    // describeNFA(nfa_struct);
 
     printf("Initializing out_vec in cuda memory\n");
     int* out_vec;
@@ -236,11 +270,17 @@ void GPU_Match_It(string regex, string text,int gridSize, int blockSize)
     CUDA_CALL(cudaMemcpy(d_text, text.c_str(), text.length(), cudaMemcpyHostToDevice));
 
 
-    printf("Calling the kernel\n");
-    size_t extern_size = n*(text.length()/gridSize + 1) * sizeof(int) ;
+    // printf("The d_string: %s", d_text);
+    size_t extern_size = n*(text.length()/(gridSize-1)) * sizeof(int) + sizeof(bool);
+    if(extern_size >= 48000)
+    {
+        char error_message[200];
+        sprintf(error_message, "You are requesting %zu bytes of data however there is a hard limit on shared memory per state machine of 48000 bytes. Please assign more blocks.\n",extern_size);
+        throw invalid_argument(error_message);
+    }
+    printf("The amount of shared memory we're requesting is %zu\n\n", extern_size);
     cudaDeviceSynchronize();
     RMatchKernel<<<gridSize, blockSize,extern_size>>>(nfa_st, nfa_tr, d_text,nfa_struct.n_states,text.length(), out_vec,out_counter);
-    cudaDeviceSynchronize();
     cudaError_t execErr = cudaGetLastError();
     if (execErr != cudaSuccess) {
             printf("Execution Error: %s\n", cudaGetErrorString(execErr));
@@ -252,13 +292,12 @@ void GPU_Match_It(string regex, string text,int gridSize, int blockSize)
     cudaMemcpy((void*) h_out_vec, (void*) out_vec, 2*MAX_NUMBER_OF_MATCHES*sizeof(int), cudaMemcpyDeviceToHost);
     int *h_out_counter = new int;
     cudaMemcpy((void*) h_out_counter, (void*) out_counter,sizeof(int), cudaMemcpyDeviceToHost);
-
     printf("print %d matches\n",*h_out_counter);
-    for(int i =0; i < MAX_NUMBER_OF_MATCHES; i++)
-    {
-        if(h_out_vec[2*i+1] > 0)
-        {
-            printf("match found at idx %d of length %d: %s\n",h_out_vec[2*i], h_out_vec[2*i+1],text.substr(h_out_vec[2*i], h_out_vec[2*i+1]).c_str());
-        }
-    }
+    // for(int i =0; i < MAX_NUMBER_OF_MATCHES; i++)
+    // {
+    //     if(h_out_vec[2*i+1] > 0)
+    //     {
+    //         printf("match found at idx %d of length %d: %s\n",h_out_vec[2*i], h_out_vec[2*i+1],text.substr(h_out_vec[2*i], h_out_vec[2*i+1]).c_str());
+    //     }
+    // }
 }

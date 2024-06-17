@@ -5,11 +5,13 @@ TARGET = gpu_demo
 CUDA_SRC = gpu_regex.cu
 CPP_SRC = gpu_demo.cpp
 NFA_SRC = nfa.cpp
+MATCH_SRC = match.cpp
 
 # Object files
 CUDA_OBJ = gpu_regex.o
 CPP_OBJ = gpu_demo.o
 NFA_OBJ = nfa.o
+MATCH_OBJ = match.o
 
 # CUDA Compiler and Flags
 CUDA_PATH = /usr/local/cuda
@@ -19,7 +21,7 @@ CUDA_LIB_PATH = $(CUDA_PATH)/lib64
 
 NVCC = $(CUDA_BIN_PATH)/nvcc
 NVCC_COMPILE_FLAGS = -g -dc -Wno-deprecated-gpu-targets --std=c++11 \
-             --expt-relaxed-constexpr -I$(CUDA_INC_PATH) -gencode arch=compute_52,code=sm_52 -lineinfo
+             --expt-relaxed-constexpr -I$(CUDA_INC_PATH) -gencode arch=compute_52,code=sm_52
 NVCC_LINK_FLAGS = -g -Wno-deprecated-gpu-targets --std=c++11 -I$(CUDA_INC_PATH)
 NVCC_LIBS = -L$(CUDA_LIB_PATH) -lcudart
 
@@ -35,7 +37,7 @@ CPP_LIBS = -L$(CUDA_LIB_PATH) -lcudart
 # Top level rule
 all: $(TARGET)
 
-$(TARGET): $(CUDA_OBJ) $(CPP_OBJ) $(NFA_OBJ)
+$(TARGET): $(CUDA_OBJ) $(CPP_OBJ) $(NFA_OBJ) $(MATCH_OBJ)
 	$(NVCC) $(NVCC_LINK_FLAGS) $^ -o $@ $(CPP_LIBS)
 
 # Compile CUDA Source Files into an object file
@@ -47,6 +49,9 @@ $(CPP_OBJ): $(CPP_SRC)
 	$(GPP) $(CPP_FLAGS) -c $< -o $@
 
 $(NFA_OBJ): $(NFA_SRC)
+	$(GPP) $(CPP_FLAGS) -c $< -o $@
+
+$(MATCH_OBJ): $(MATCH_SRC)
 	$(GPP) $(CPP_FLAGS) -c $< -o $@
 
 # Clean everything including temporary Emacs files

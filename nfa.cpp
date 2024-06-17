@@ -240,7 +240,7 @@ list<state*> parse_regex(string reg,state* main_node)
             state* end_node = new state();
             state_list.push_back(end_node);
             //printf("before anything nfa\n ");
-            print_nfa(convert_state_list(state_list));
+            // print_nfa(convert_state_list(state_list));
             state* left_node = new state();
             if(i == 0)
             {   
@@ -250,11 +250,11 @@ list<state*> parse_regex(string reg,state* main_node)
             {
                 list<state*> l_state_list= parse_regex(reg.substr(0, i), left_node);
                 //printf("L STATE LIST\n");
-                print_nfa(convert_state_list(l_state_list));
+                // print_nfa(convert_state_list(l_state_list));
                 main_node->add_transition((int)state_list.size(),string(""), true);
                 state_list = append_state_list(state_list, l_state_list,1);
                      //printf("COMBINED STATE LIST\n ");
-                print_nfa(convert_state_list(state_list));
+                // print_nfa(convert_state_list(state_list));
             }
             state* right_node = new state();
 
@@ -265,11 +265,11 @@ list<state*> parse_regex(string reg,state* main_node)
             {
                 list<state*> r_state_list= parse_regex(reg.substr(i+1, reg.length()-i), right_node);
                                 //printf("R STATE LIST\n");
-                print_nfa(convert_state_list(r_state_list));
+                // print_nfa(convert_state_list(r_state_list));
                 main_node->add_transition((int)state_list.size(),string(""), true);
                 state_list = append_state_list(state_list, r_state_list,1);
                 //printf("COMBINED STATE LIST\n ");
-                print_nfa(convert_state_list(state_list));
+                // print_nfa(convert_state_list(state_list));
             }
             checkNFA(convert_state_list(state_list));
             generate_nfa_diagram(convert_state_list(state_list),(string("progressive_diagram\\") + fix_this(reg)).c_str());
@@ -348,7 +348,7 @@ list<state*> parse_regex(string reg,state* main_node)
 
     if(reg[0] == '(' && reg[reg.length()-1] == ')')
     {
-        printf("returning NFA for reg %s\n", reg.c_str());
+        // printf("returning NFA for reg %s\n", reg.c_str());
         return parse_regex(reg.substr(1,reg.length()-2), main_node);
     }
 
@@ -361,6 +361,5 @@ list<state*> parse_regex(string reg,state* main_node)
 
 
     return state_list;
-
 }
 
